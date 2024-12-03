@@ -1,0 +1,59 @@
+services:
+  ai-app:
+    image: ai-project1-ai-app:latest
+    build:
+      context: F:\ai-project1\ai-app
+      dockerfile: F:\ai-project1\ai-app/Dockerfile
+    init: true
+    volumes:
+      - type: bind 
+        source: F:\ai-project1\ai-app
+        target: /usr/src/app
+    networks:
+      - backend
+    ports:
+      - 7860:7860
+  ai-models:
+    image: ai-project1-ai-models:latest
+    build:
+      context: F:\ai-project1\ai-models\
+      dockerfile: F:\ai-project1\ai-models\Dockerfile
+    init: true
+    volumes:
+      - type: bind 
+        source: F:\ai-project1\ai-models\
+        target: /usr/src/app
+    networks:
+      - backend
+    ports:
+      - 8080:8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  #auto-voice:
+  #  image: ai-project1-auto-voice:latest
+  #  build:
+  #    context: F:\ai-project1\auto-voice\
+  #    dockerfile: F:\ai-project1\auto-voice\Dockerfile
+  #  init: true
+  #  volumes:
+  #    - type: bind 
+  #      source: F:\ai-project1\auto-voice\
+  #      target: /usr/src/app
+  #  networks:
+  #    - backend
+  #  ports:
+  #    - 7860:7860
+  #  deploy:
+  #    resources:
+  #      reservations:
+  #        devices:
+  #          - driver: nvidia
+  #            count: 1
+  #            capabilities: [gpu]
+networks:
+  backend:
