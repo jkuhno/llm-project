@@ -19,7 +19,7 @@ from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5Hif
 
 ### API server housing AI models
 ### Serving model outputs via FastAPI
-### Copyright Jani Kuhno
+### Copyright (c) Jani Kuhno
 
 class TextRequest(BaseModel):
     text: str
