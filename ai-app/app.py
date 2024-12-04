@@ -28,6 +28,15 @@ def read_response(answer):
     return answer, audio_tuple
 
 
+def save_model(model_name):
+    response = requests.post("http://ai-models:8000/save_model", 
+                              json={"text": model_name},
+
+                            )
+    message = response.json()
+    return message
+
+
 with gr.Blocks() as app:
     gr.HTML(
         f"""
@@ -42,9 +51,13 @@ with gr.Blocks() as app:
             state = gr.State()
         with gr.Row():
             audio_in = gr.Audio(label="Speak your question", sources="microphone", type="filepath")
+    with gr.Row():
+        model = gr.Textbox(label="Check if HF model is saved, save if not")
+        model_btn = gr.Button("Check / Save")
 
 
     audio_in.stop_recording(generate_response, audio_in, [state, answer, audio_out])\
         .then(fn=read_response, inputs=state, outputs=[answer, audio_out])\
 
+    model_btn.click(fn=save_model, inputs=model, outputs=model)
 app.launch(share=False)

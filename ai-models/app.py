@@ -13,7 +13,7 @@ import torchaudio
 import librosa
 
 from transformers import pipeline
-from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
+from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan, AutoModelForCausalLM, AutoTokenizer
 
 
 
@@ -35,23 +35,45 @@ app = FastAPI()
 
 def generate_answer(transcription):
 
-    pipe = pipeline("text-generation", "stabilityai/stablelm-zephyr-3b", device="cuda:0", torch_dtype=torch.bfloat16)
+    model_name = "stabilityai/stablelm-zephyr-3b"
+    device = "cuda:0"  # Change to "cpu" if not using CUDA
+    dtype = torch.bfloat16  # Use float16 or float32 for other devices
+
+    if os.path.exists(f"/usr/src/app/models/{model_name}"):
+        print(f"{model_name} saves found")
+    
+        tokenizer = AutoTokenizer.from_pretrained(f"/usr/src/app/models/{model_name}", use_safetensors=True)
+        model = AutoModelForCausalLM.from_pretrained(f"/usr/src/app/models/{model_name}", use_safetensors=True, torch_dtype=dtype).to(device)
+
+    else:
+        print(f"No {model_name} saves, downloading and saving models")
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype).to(device)
+
+        tokenizer.save_pretrained(f"/usr/src/app/models/{model_name}", safe_serialization=True)
+        model.save_pretrained(f"/usr/src/app/models/{model_name}", safe_serialization=True)
+
+        print(f"{model_name} saved")
+
     messages = [
-        {
-        "role": "system",
-        "content": "You are a friendly assistant who always responds in ten words or less",
-        },
+        {"role": "system", "content": "You are a friendly assistant who always responds in ten words or less."},
         {"role": "user", "content": transcription},
     ]
-    return pipe(messages, max_new_tokens=64)[0]['generated_text'][-1]["content"]
+    prompt = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
 
-"""
-    model_id = "gpt2"
-    generation_pipeline = pipeline("question-answering", model=model_id, device="cuda:0") # model_kwargs={"torch_dtype": torch.bfloat16}, device_map="auto")
-    answer = generation_pipeline(question=transcription, context="I've been quite good lately. Been working out and getting a lot of sun.")
-    print(answer)
-    return answer["answer"]
-"""
+    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+
+    outputs = model.generate(
+        **inputs,
+        max_new_tokens=64,
+        pad_token_id=tokenizer.eos_token_id  # Prevent errors in some models
+    )
+
+    generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    # Extract the content of the last assistant response
+    return generated_text.split("\n")[-1].strip()
+
+
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
@@ -101,10 +123,27 @@ async def read_response(request: TextRequest):
     """
     text = request.text
 
-    # Load the processor and model
-    processor = SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
-    model = SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts")
-    vocoder = SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan")
+    if os.path.exists("/usr/src/app/models/microsoft/speecht5_tts"):
+        print("speecht5_tts saves found")
+
+        # Load the processor and model
+        processor = SpeechT5Processor.from_pretrained("/usr/src/app/models/microsoft/speecht5_tts", use_safetensors=True)
+        model = SpeechT5ForTextToSpeech.from_pretrained("/usr/src/app/models/microsoft/speecht5_tts", use_safetensors=True)
+        vocoder = SpeechT5HifiGan.from_pretrained("/usr/src/app/models/microsoft/speecht5_hifigan", use_safetensors=True)
+
+
+    else:
+        print("No speecht5_tts saves, downloading and saving models")
+
+        processor = SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
+        model = SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts")
+        vocoder = SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan")
+
+        processor.save_pretrained("/usr/src/app/models/microsoft/speecht5_tts", safe_serialization=True)
+        model.save_pretrained("/usr/src/app/models/microsoft/speecht5_tts", safe_serialization=True)
+        vocoder.save_pretrained("/usr/src/app/models/microsoft/speecht5_hifigan", safe_serialization=True)
+
+        print("speecht5_tts saved")
 
      # Load a speaker embedding from the pre-trained dataset
     dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
@@ -122,3 +161,8 @@ async def read_response(request: TextRequest):
     sampling_rate = 16000  # SpeechT5 outputs audio at 16kHz
 
     return {"samplerate": sampling_rate, "audio": audio_waveform.tolist()}
+
+"""
+@app.post("/save_model")
+async def models(request: TextRequest):
+"""

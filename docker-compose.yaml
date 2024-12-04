@@ -2,12 +2,12 @@ services:
   ai-app:
     image: ai-project1-ai-app:latest
     build:
-      context: .\ai-app
-      dockerfile: .\ai-app/Dockerfile
+      context: ./ai-app
+      dockerfile: Dockerfile
     init: true
     volumes:
       - type: bind 
-        source: .\ai-app
+        source: ./ai-app/
         target: /usr/src/app
     networks:
       - backend
@@ -16,12 +16,12 @@ services:
   ai-models:
     image: ai-project1-ai-models:latest
     build:
-      context: .\ai-models\
-      dockerfile: .\ai-models\Dockerfile
+      context: ./ai-models
+      dockerfile: Dockerfile
     init: true
     volumes:
       - type: bind 
-        source: .\ai-models\
+        source: ./ai-models/
         target: /usr/src/app
     networks:
       - backend

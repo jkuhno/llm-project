@@ -4,6 +4,7 @@
 auto-voice/
 .gradio/
 *.wav
+models/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
