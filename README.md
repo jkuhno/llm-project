@@ -12,7 +12,7 @@ The platform for running the solution is Docker.
 
 ### Todo
 
-Increase inference server performance
-Streaming
-Add agentic capability
-Create tools
+- Increase inference server performance
+- Streaming
+- Add agentic capability
+- Create tools
