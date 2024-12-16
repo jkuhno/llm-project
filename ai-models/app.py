@@ -36,6 +36,7 @@ app = FastAPI()
 
 device = "cuda:0"  # Change to "cpu" if not using CUDA
 dtype = torch.bfloat16  # use float16 or float32 if bfloat is not supported
+whisper_dtype = torch.float16 
 
 
 
@@ -56,7 +57,8 @@ gen_tokenizer = AutoTokenizer.from_pretrained(
 gen_model = AutoModelForCausalLM.from_pretrained(
     gen_model_name,
     torch_dtype=dtype,
-    device_map="auto"
+    device_map="auto",
+    #attn_implementation="sdpa"
 )
 
 
@@ -65,9 +67,9 @@ print("initializing whisper model")
 whisper = pipeline(
     "automatic-speech-recognition", 
     "distil-whisper/distil-medium.en", 
-    torch_dtype=torch.float16, 
-    device="cuda:0", 
-    return_timestamps=True
+    torch_dtype=whisper_dtype, 
+    device=device, 
+    return_timestamps=True,
 )
 
 
@@ -78,15 +80,15 @@ print("initializing text-to-speech model")
 processor = SpeechT5Processor.from_pretrained(
     "microsoft/speecht5_tts",
     torch_dtype=dtype,
-    device_map="auto"
+    device_map="auto",
 )
 speech_model = SpeechT5ForTextToSpeech.from_pretrained(
     "microsoft/speecht5_tts",
-    torch_dtype=dtype
+    torch_dtype=dtype,
 ).to(device)
 vocoder = SpeechT5HifiGan.from_pretrained(
     "microsoft/speecht5_hifigan",
-    torch_dtype=dtype
+    torch_dtype=dtype,
 ).to(device)
 
 dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
@@ -148,9 +150,9 @@ async def generate_answer(file: UploadFile = File(...)):
         inputs = gen_tokenizer(prompt, return_tensors="pt").to(device)
 
         outputs = gen_model.generate(
-        **inputs,
-        max_new_tokens=64,
-        pad_token_id=gen_tokenizer.eos_token_id  # Prevent errors in some models
+                **inputs,
+                max_new_tokens=64,
+                pad_token_id=gen_tokenizer.eos_token_id  # Prevent errors in some models
         )
 
         generated_text = gen_tokenizer.decode(outputs[0], skip_special_tokens=True)
