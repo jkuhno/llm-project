@@ -3,23 +3,20 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import List
 import os
-import json
 
-import numpy as np
 import torch
-from datasets import load_dataset
 
-import torchaudio
-import librosa
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor
+from faster_whisper import WhisperModel
 
-from transformers import pipeline
-from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan, AutoModelForCausalLM, AutoTokenizer
-
-
+from speechbrain.inference.TTS import FastSpeech2
+from speechbrain.inference.vocoders import HIFIGAN
 
 ### API server housing AI models
 ### Serving model outputs via FastAPI
 ### Copyright (c) Jani Kuhno
+
+os.environ["SUNO_USE_SMALL_MODELS"] = "True"
 
 class TextRequest(BaseModel):
     text: str
@@ -32,70 +29,47 @@ class AudioResponse(BaseModel):
     audio: List[float]  # Audio waveform as a list of floats
 
 
+# FastAPI app
 app = FastAPI()
 
-device = "cuda:0"  # Change to "cpu" if not using CUDA
-dtype = torch.bfloat16  # use float16 or float32 if bfloat is not supported
-whisper_dtype = torch.float16 
+# Model holders
+asr_model = None
+tokenizer = None
+llm_model = None
+tts_model = None
+fastspeech2 = None
+hifi_gan = None
+
+#Model variables
+device = "cuda"
 
 
+# Startup: Load models into memory once
+# Use cuda device everywhere it is possible
+@app.on_event("startup")
+async def load_models():
+    global asr_model, tokenizer, llm_model, fastspeech2, hifi_gan
 
-################################# MODELS #########################################
-##################################################################################
-# Loading the models in global scope at starup, without using FastAPI on_startup
-# Loading the models from cahce, after compose down load from HF hub
-# Loading from internet seems to be faster than loading from HDD
+    # 1. ASR: Load Faster-Whisper model (streaming speech-to-text)
+    # Experiment with larger models if inaccurate, this is fast enough
+    asr_model = WhisperModel("tiny", device=device, compute_type="float16")
 
-print("initializing zephyr model")
+    # 2. LLM: Load a small text generation model (distilgpt2 in this case)
+    model_name = "distilgpt2"
+    tokenizer = AutoTokenizer.from_pretrained(model_name, device_map=0)
+    llm_model = AutoModelForCausalLM.from_pretrained(model_name).to(device)
 
-gen_model_name = "stabilityai/stablelm-zephyr-3b"
-
-gen_tokenizer = AutoTokenizer.from_pretrained(
-    gen_model_name
-)
-
-gen_model = AutoModelForCausalLM.from_pretrained(
-    gen_model_name,
-    torch_dtype=dtype,
-    device_map="auto",
-    #attn_implementation="sdpa"
-)
-
-
-print("initializing whisper model")
-
-whisper = pipeline(
-    "automatic-speech-recognition", 
-    "distil-whisper/distil-medium.en", 
-    torch_dtype=whisper_dtype, 
-    device=device, 
-    return_timestamps=True,
-)
-
-
-print("initializing text-to-speech model")
-
-# SpeexhT5forTexttoSpeech and T5HifiGan do not support device_map auto,
-# carefully move the models and all input and embedding tensors to gpu manually
-processor = SpeechT5Processor.from_pretrained(
-    "microsoft/speecht5_tts",
-    torch_dtype=dtype,
-    device_map="auto",
-)
-speech_model = SpeechT5ForTextToSpeech.from_pretrained(
-    "microsoft/speecht5_tts",
-    torch_dtype=dtype,
-).to(device)
-vocoder = SpeechT5HifiGan.from_pretrained(
-    "microsoft/speecht5_hifigan",
-    torch_dtype=dtype,
-).to(device)
-
-dataset = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation")
-speaker_embedding = dataset[0]["xvector"]  # Use the first speaker embedding
-# Convert to tensor and add batch dimension
-# Then send to GPU and convert to bfloat so all tensors are of same type
-speaker_embedding = torch.tensor(speaker_embedding).unsqueeze(0).to(device).to(dtype)  
+    # 3. fastspeech and HIFIGAN
+    # Disk so slow that no need to save locally
+    fastspeech2 = FastSpeech2.from_hparams(
+        source="speechbrain/tts-fastspeech2-ljspeech",
+        run_opts={"device": device},
+    )
+    hifi_gan = HIFIGAN.from_hparams(
+        source="speechbrain/tts-hifigan-ljspeech",
+        run_opts={"device": device}, 
+        )
+    print("Models loaded successfully!")
 
 
 
@@ -133,33 +107,23 @@ async def generate_answer(file: UploadFile = File(...)):
         ### Speech recognition ###
         ##########################
         
-        data, samplerate = librosa.load(save_path, sr=16000)
+        segments, _ = asr_model.transcribe(save_path, language="en")
+        recognized_text = " ".join(segment.text for segment in segments)
         
-        transcription = whisper(data)
+        print(f"ASR Output: {recognized_text}")
+
+        if not recognized_text:
+            recognized_text = "Error in ASR process [nervous laughter]"
 
 
         ### Generative model ###
         ########################
-        messages = [
-        {"role": "system", "content": "You are a friendly assistant who always responds in ten words or less."},
-        {"role": "user", "content": transcription["text"]},
-        ]
+        inputs = tokenizer(recognized_text, return_tensors="pt").to(device)
+        output_tokens = llm_model.generate(**inputs, max_new_tokens=15, do_sample=True)
+        generated_text = tokenizer.decode(output_tokens[0], skip_special_tokens=True)
+        print(f"Generated Text: {generated_text}")
 
-        prompt = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
-
-        inputs = gen_tokenizer(prompt, return_tensors="pt").to(device)
-
-        outputs = gen_model.generate(
-                **inputs,
-                max_new_tokens=64,
-                pad_token_id=gen_tokenizer.eos_token_id  # Prevent errors in some models
-        )
-
-        generated_text = gen_tokenizer.decode(outputs[0], skip_special_tokens=True)
-        # Extract the content of the last assistant response
-        answer = generated_text.split("\n")[-1].strip()
-
-        return {"response": answer}
+        return {"response": generated_text}
 
     except Exception as e:
         return JSONResponse(
@@ -178,25 +142,31 @@ async def generate_answer(file: UploadFile = File(...)):
         Tuple[int, List]: A tuple containing the sampling rate and the audio waveform.
                                    List of floats needs to be converted to ndarray in UI app.
     """
+
 @app.post("/speech", response_model=AudioResponse)
 async def read_response(request: TextRequest):
-    text = request.text
+    try:
+        text = request.text
 
-    # Prepare input text
-    inputs = processor(text=text, return_tensors="pt")
+        # Prepare input text
+        mel_output, durations, pitch, energy = fastspeech2.encode_text(
+            [text],
+            pace=1.0,        # scale up/down the speed
+            pitch_rate=1.0,  # scale up/down the pitch
+            energy_rate=1.0, # scale up/down the energy
+        )
 
-    # Move the inputs to gpu manually
-    inputs = {key: value.to(device) for key, value in inputs.items()}
+        waveforms = hifi_gan.decode_batch(mel_output)
+        waveforms = waveforms.cpu().numpy().squeeze() 
 
-    # Generate speech
-    with torch.no_grad():
-        speech = speech_model.generate_speech(inputs["input_ids"], speaker_embeddings=speaker_embedding, vocoder=vocoder)
+        # https://speechbrain.readthedocs.io/en/latest/API/speechbrain.inference.vocoders.html#speechbrain.inference.vocoders.HIFIGAN.decode_spectrogram
+        sampling_rate = 22050
 
-    # Return the PyTorch tensor from GPU to CPU mem, convert the audio tensor to NumPy 
-    # and get the sampling rate
-    # Conversion from bfloat to float is needed because numpy doesn't want bfloats
-    audio_waveform = speech.to(torch.float32).cpu().numpy()
-    sampling_rate = 16000  # SpeechT5 outputs audio at 16kHz
+        #pydantic AudioResponse
+        return {"samplerate": sampling_rate, "audio": waveforms.tolist()}
 
-    #pydantic AudioResponse
-    return {"samplerate": sampling_rate, "audio": audio_waveform.tolist()}
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"An error occurred while processing the file: {str(e)}"},
+        )
