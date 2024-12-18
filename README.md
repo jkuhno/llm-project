@@ -12,8 +12,8 @@ The platform for running the solution is Docker.
 
 ### Todo
 
-- Increase inference server performance
-- Fix the robotic voice
+- **Kinda done** Increase inference server performance
+- **Kinda done, needs refinement** Fix the robotic voice
 - Streaming
 - Add agentic capability
 - Create tools
