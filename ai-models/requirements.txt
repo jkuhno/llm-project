@@ -2,6 +2,7 @@ fastapi[standard]
 uvicorn==0.32.0
 numpy
 transformers
+huggingface_hub
 torch
 torchaudio
 sentencepiece

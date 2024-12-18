@@ -34,5 +34,10 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    secrets:
+      - hf_token
 networks:
   backend:
+secrets:
+   hf_token:
+     file: ./hf_token.txt

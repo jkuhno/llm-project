@@ -6,7 +6,9 @@ import os
 
 import torch
 
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor
+from huggingface_hub import login
+
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, pipeline
 from faster_whisper import WhisperModel
 
 from speechbrain.inference.TTS import FastSpeech2
@@ -16,8 +18,8 @@ from speechbrain.inference.vocoders import HIFIGAN
 ### Serving model outputs via FastAPI
 ### Copyright (c) Jani Kuhno
 
-os.environ["SUNO_USE_SMALL_MODELS"] = "True"
 
+# Pydantic requests and responses
 class TextRequest(BaseModel):
     text: str
 
@@ -28,14 +30,19 @@ class AudioResponse(BaseModel):
     samplerate: int
     audio: List[float]  # Audio waveform as a list of floats
 
+# Open .gitignored file hf_token.txt containing the access token to huggingface_hub
+with open('/run/secrets/hf_token') as token:
+    hf_token = token.read().strip()
+
+# Authenticate with the access token for gated llama models
+login(hf_token)
 
 # FastAPI app
 app = FastAPI()
 
 # Model holders
 asr_model = None
-tokenizer = None
-llm_model = None
+generator = None
 tts_model = None
 fastspeech2 = None
 hifi_gan = None
@@ -48,16 +55,15 @@ device = "cuda"
 # Use cuda device everywhere it is possible
 @app.on_event("startup")
 async def load_models():
-    global asr_model, tokenizer, llm_model, fastspeech2, hifi_gan
+    global asr_model, generator, fastspeech2, hifi_gan
 
     # 1. ASR: Load Faster-Whisper model (streaming speech-to-text)
     # Experiment with larger models if inaccurate, this is fast enough
     asr_model = WhisperModel("tiny", device=device, compute_type="float16")
 
-    # 2. LLM: Load a small text generation model (distilgpt2 in this case)
-    model_name = "distilgpt2"
-    tokenizer = AutoTokenizer.from_pretrained(model_name, device_map=0)
-    llm_model = AutoModelForCausalLM.from_pretrained(model_name).to(device)
+    # 2. Llama 3.2 text generation
+    model_name = "meta-llama/Llama-3.2-3B-Instruct"
+    generator = pipeline(model=model_name, device=device, torch_dtype=torch.float16)
 
     # 3. fastspeech and HIFIGAN
     # Disk so slow that no need to save locally
@@ -118,12 +124,23 @@ async def generate_answer(file: UploadFile = File(...)):
 
         ### Generative model ###
         ########################
-        inputs = tokenizer(recognized_text, return_tensors="pt").to(device)
-        output_tokens = llm_model.generate(**inputs, max_new_tokens=15, do_sample=True)
-        generated_text = tokenizer.decode(output_tokens[0], skip_special_tokens=True)
-        print(f"Generated Text: {generated_text}")
 
-        return {"response": generated_text}
+        prompt = [
+            {"role": "system", "content": "You are a helpful assistant, that always responds in 10 words or less."},
+            {"role": "user", "content": recognized_text},
+        ]
+
+        generation = generator(
+            prompt,
+            do_sample=False,
+            temperature=1.0,
+            top_p=1,
+            max_new_tokens=20
+        )
+        print(generation[0]['generated_text'][2]["content"])
+
+        return {"response": generation[0]['generated_text'][2]["content"]}
+
 
     except Exception as e:
         return JSONResponse(
@@ -147,7 +164,7 @@ async def generate_answer(file: UploadFile = File(...)):
 async def read_response(request: TextRequest):
     try:
         text = request.text
-
+        #text = "testing testing"
         # Prepare input text
         mel_output, durations, pitch, energy = fastspeech2.encode_text(
             [text],
