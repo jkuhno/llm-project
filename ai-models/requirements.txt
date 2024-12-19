@@ -3,10 +3,14 @@ uvicorn==0.32.0
 numpy
 transformers
 huggingface_hub
+langchain
+langchain-core
+langchain-huggingface
 torch
 torchaudio
 sentencepiece
 accelerate
+bitsandbytes
 faster-whisper
 ctranslate2
 speechbrain

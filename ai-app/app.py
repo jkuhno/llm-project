@@ -12,12 +12,12 @@ def generate_response(audio, use_rag):
     print(f"RAG usage toggled: {use_rag}")
     with open(audio, 'rb') as f:
         response = requests.post("http://ai-models:8000/generate", files={"file": f})
-    
-    if response.status_code == 200:
         data = response.json()
+
+    if response.status_code == 200:
         return data["response"] #, None, None
     else:
-        return f"{response.status_code}: There was an error generating the answer"
+        return f"{response.status_code}: {data['error']}"
 
 
 def read_response(answer):
