@@ -3,6 +3,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import List
 import os
+from tqdm import tqdm
+import logging
 
 import torch
 from huggingface_hub import login
@@ -33,11 +35,16 @@ class AudioResponse(BaseModel):
     audio: List[float]  # Audio waveform as a list of floats
 
 
-# Open .gitignored file hf_token.txt containing the access token to huggingface_hub
-with open('/run/secrets/hf_token') as token:
-    hf_token = token.read().strip()
+# Set langsmith tracing
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+with open('/run/secrets/langsmith_token') as token:
+    if token:
+        os.environ["LANGCHAIN_API_KEY"] = token.read().strip()
+
 
 # Authenticate with the access token for gated llama models
+with open('/run/secrets/hf_token') as token:
+    hf_token = token.read().strip()
 login(hf_token)
 
 
@@ -65,51 +72,75 @@ device = "cuda"
 async def load_models():
     global asr_model, fastspeech2, hifi_gan, chat_model
 
-    # 1. ASR: Load Faster-Whisper model (streaming speech-to-text)
-    # Experiment with larger models if inaccurate, this is fast enough
-    asr_model = WhisperModel("tiny", device=device, compute_type="float16")
 
+    class SuppressInfoLogs:
+        """Context manager to suppress only INFO-level logs."""
+        def __enter__(self):
+            self.original_level = logging.getLogger().level
+            logging.getLogger().setLevel(logging.WARNING)
 
-    # 2. Llama 3.2 text generation
-    model_name = "meta-llama/Llama-3.2-3B-Instruct"
+        def __exit__(self, exc_type, exc_value, traceback):
+            logging.getLogger().setLevel(self.original_level)
 
-    # Quantization to fit more stuff in the tiny 8GB vram
-    quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-
-    llm_tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-    llm_model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype="auto",
-        device_map="auto",
-        quantization_config=quantization_config
-        )
     
-    # To support langchain, a pipeline is a must (?)
-    # With 8bit quantization, a pipeline is reported to cause slowdown. Needs to be optimized
-    pipe = pipeline(
-        "text-generation", 
-        model=llm_model, 
-        tokenizer=llm_tokenizer, 
-        max_new_tokens=50,
-        return_full_text=False
-    )
+    with tqdm(total=4, desc="Loading Models", ncols=80) as pbar:
+        
+        # 1. ASR: Load Faster-Whisper model (streaming speech-to-text)
+        # Experiment with larger models if inaccurate, this is fast enough
+        with SuppressInfoLogs():
+            asr_model = WhisperModel("tiny", device=device, compute_type="float16")
+        pbar.update(1)
+        pbar.set_postfix_str("ASR model loaded")
 
-    # Serve the model as a Langchain ChatModel
-    hf_pipe = HuggingFacePipeline(pipeline=pipe)
-    chat_model = ChatHuggingFace(llm=hf_pipe)
+    
+        # 2. Llama 3.2 text generation
+        with SuppressInfoLogs():
+            model_name = "meta-llama/Llama-3.2-3B-Instruct"
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+
+            llm_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            llm_model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype="auto",
+                device_map="auto",
+                quantization_config=quantization_config
+            )
+
+            # To support langchain, a pipeline is a must (?)
+            # With 8bit quantization, a pipeline is reported to cause slowdown. Needs to be optimized
+            pipe = pipeline(
+                "text-generation",
+                model=llm_model,
+                tokenizer=llm_tokenizer,
+                max_new_tokens=50,
+                return_full_text=False
+            )
+            hf_pipe = HuggingFacePipeline(pipeline=pipe)
+            chat_model = ChatHuggingFace(llm=hf_pipe)
+        pbar.update(1)
+        pbar.set_postfix_str("Chat model loaded")
 
 
-    # 3. fastspeech and HIFIGAN
-    fastspeech2 = FastSpeech2.from_hparams(
-        source="speechbrain/tts-fastspeech2-ljspeech",
-        run_opts={"device": device},
-    )
-    hifi_gan = HIFIGAN.from_hparams(
-        source="speechbrain/tts-hifigan-ljspeech",
-        run_opts={"device": device}, 
-        )
-    print("Models loaded successfully!")
+        # Load TTS models (FastSpeech2 and HiFi-GAN)
+        with SuppressInfoLogs():
+            fastspeech2 = FastSpeech2.from_hparams(
+                source="speechbrain/tts-fastspeech2-ljspeech",
+                run_opts={"device": device},
+            )
+        pbar.update(1)
+        pbar.set_postfix_str("FastSpeech2 model loaded")
+
+        with SuppressInfoLogs():
+            hifi_gan = HIFIGAN.from_hparams(
+                source="speechbrain/tts-hifigan-ljspeech",
+                run_opts={"device": device},
+            )
+        pbar.update(1)
+        pbar.set_postfix_str("HiFi-GAN model loaded")
+
+
+    print("\nModels loaded successfully!")
+    print(f"Fast tokenizer enabled: {llm_tokenizer.is_fast}")
 
 
 

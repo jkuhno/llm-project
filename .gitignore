@@ -6,6 +6,7 @@ auto-voice/
 *.wav
 models/
 hf_token.txt
+langsmith.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
