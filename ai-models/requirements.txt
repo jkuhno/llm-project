@@ -6,6 +6,7 @@ huggingface_hub
 langchain
 langchain-core
 langchain-huggingface
+langgraph
 torch
 torchaudio
 sentencepiece

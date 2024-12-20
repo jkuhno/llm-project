@@ -10,7 +10,10 @@ import torch
 from huggingface_hub import login
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, pipeline
 from langchain_huggingface import HuggingFacePipeline, ChatHuggingFace
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, trim_messages
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import START, MessagesState, StateGraph
 
 from speechbrain.inference.TTS import FastSpeech2
 from speechbrain.inference.vocoders import HIFIGAN
@@ -57,10 +60,11 @@ asr_model = None
 fastspeech2 = None
 hifi_gan = None
 chat_model = None
+lang_app = None
 
-#Model variables
+# Model configs
 device = "cuda"
-
+config = {"configurable": {"thread_id": "abc123"}}
 
 ################################# MODELS #########################################
 ##################################################################################
@@ -70,8 +74,7 @@ device = "cuda"
 # Disk so slow that no need to save locally
 @app.on_event("startup")
 async def load_models():
-    global asr_model, fastspeech2, hifi_gan, chat_model
-
+    global asr_model, fastspeech2, hifi_gan, chat_model, lang_app
 
     class SuppressInfoLogs:
         """Context manager to suppress only INFO-level logs."""
@@ -142,6 +145,44 @@ async def load_models():
     print("\nModels loaded successfully!")
     print(f"Fast tokenizer enabled: {llm_tokenizer.is_fast}")
 
+    workflow = StateGraph(state_schema=MessagesState)
+
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                ("You are a helpful assistant, who always greets the user with the word 'sir'. "
+                 "Answer concisely to any request or question provided by the user. Use fifteen words or less. "
+                 "If answering in numbers, use written form. For example: answer 'number ten' and not 'number 10'"
+                ),
+            ),
+            MessagesPlaceholder(variable_name="messages"),
+        ]
+    )
+
+    trimmer = trim_messages(
+        max_tokens=200,
+        strategy="last",
+        token_counter=chat_model,
+        include_system=True,
+        allow_partial=False,
+        start_on="human",
+    )
+
+    # Define the function that calls the model
+    def call_model(state: MessagesState):
+        trimmed_messages = trimmer.invoke(state["messages"])
+        prompt = prompt_template.invoke(trimmed_messages)
+        response = chat_model.invoke(prompt)
+        return {"messages": response}
+
+    # Define the (single) node in the graph
+    workflow.add_edge(START, "model")
+    workflow.add_node("model", call_model)
+
+    memory = MemorySaver()
+    lang_app = workflow.compile(checkpointer=memory)
+
 
 
 ################################# API ############################################
@@ -189,27 +230,19 @@ async def generate_answer(file: UploadFile = File(...)):
 
         ### Generative model ###
         ########################
-
-
-        sys_prompt = ("You are a helpful assistant, who always greets the user with the word 'sir'. "
-                      "Answer concisely to any request or question provided by the user. Use fifteen words or less. "
-                      "If answering in numbers, use written form. For example: answer 'number ten' and not 'number 10'"
-        )
         
-        prompt = ChatPromptTemplate.from_messages(
-            [("system", sys_prompt), ("user", "{text}")]
-        )
+        query = recognized_text
 
-        # Invoke the PromptTemplate to get PromptValue and use that to invoke the model in a single chain
-        chain = prompt | chat_model
+        input_messages = [HumanMessage(query)]
+        output = lang_app.invoke({"messages": input_messages}, config)
+        
+        # output contains all messages in state
+        response = output["messages"][-1]
+        output["messages"][-1].pretty_print()
+        
 
-        # Invoke the chain with user input as text
-        response = chain.invoke({"text": recognized_text})
-
-        print(response)
-
-        # Response is an AIMessage, content is the actual answer, rest is metadata etc
         return {"response": response.content}
+
 
 
     except Exception as e:
@@ -218,6 +251,9 @@ async def generate_answer(file: UploadFile = File(...)):
             status_code=500,
             content={"error": f"An error occurred while processing the file: {str(e)}"},
         )
+
+
+
 
 
 """
