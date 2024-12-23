@@ -8,17 +8,20 @@ import logging
 
 import torch
 from huggingface_hub import login
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, pipeline
-from langchain_huggingface import HuggingFacePipeline, ChatHuggingFace
+from transformers import AutoProcessor, BitsAndBytesConfig
+from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, trim_messages
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import START, MessagesState, StateGraph
+
+import uuid
 
 from speechbrain.inference.TTS import FastSpeech2
 from speechbrain.inference.vocoders import HIFIGAN
 
 from faster_whisper import WhisperModel
+
+from chat_model import ChatModel
+from sync_graph import SyncGraph
 
 
 ### API server housing AI models
@@ -60,11 +63,16 @@ asr_model = None
 fastspeech2 = None
 hifi_gan = None
 chat_model = None
-lang_app = None
+graph = None
+
 
 # Model configs
 device = "cuda"
-config = {"configurable": {"thread_id": "abc123"}}
+chat_model_name = "meta-llama/Llama-3.2-3B-Instruct"
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"
+
+
 
 ################################# MODELS #########################################
 ##################################################################################
@@ -72,12 +80,12 @@ config = {"configurable": {"thread_id": "abc123"}}
 # Startup: Load models into memory once
 # Use cuda device everywhere it is possible
 # Disk so slow that no need to save locally
+
 @app.on_event("startup")
 async def load_models():
-    global asr_model, fastspeech2, hifi_gan, chat_model, lang_app
+    global asr_model, fastspeech2, hifi_gan, chat_model, graph
 
     class SuppressInfoLogs:
-        """Context manager to suppress only INFO-level logs."""
         def __enter__(self):
             self.original_level = logging.getLogger().level
             logging.getLogger().setLevel(logging.WARNING)
@@ -88,7 +96,8 @@ async def load_models():
     
     with tqdm(total=4, desc="Loading Models", ncols=80) as pbar:
         
-        # 1. ASR: Load Faster-Whisper model (streaming speech-to-text)
+        ######################### ASR ######################
+        # Load Faster-Whisper model (streaming speech-to-text)
         # Experiment with larger models if inaccurate, this is fast enough
         with SuppressInfoLogs():
             asr_model = WhisperModel("tiny", device=device, compute_type="float16")
@@ -96,35 +105,15 @@ async def load_models():
         pbar.set_postfix_str("ASR model loaded")
 
     
-        # 2. Llama 3.2 text generation
+        ###################### CHAT MODEL ###################
         with SuppressInfoLogs():
-            model_name = "meta-llama/Llama-3.2-3B-Instruct"
-            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-
-            llm_tokenizer = AutoTokenizer.from_pretrained(model_name)
-            llm_model = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                torch_dtype="auto",
-                device_map="auto",
-                quantization_config=quantization_config
-            )
-
-            # To support langchain, a pipeline is a must (?)
-            # With 8bit quantization, a pipeline is reported to cause slowdown. Needs to be optimized
-            pipe = pipeline(
-                "text-generation",
-                model=llm_model,
-                tokenizer=llm_tokenizer,
-                max_new_tokens=50,
-                return_full_text=False
-            )
-            hf_pipe = HuggingFacePipeline(pipeline=pipe)
-            chat_model = ChatHuggingFace(llm=hf_pipe)
+            model_conf = ChatModel(chat_model_name, quantization_config)
+            chat_model = model_conf.get_model()
         pbar.update(1)
         pbar.set_postfix_str("Chat model loaded")
 
 
-        # Load TTS models (FastSpeech2 and HiFi-GAN)
+        ################# TTS (FASTSPEECH2) ##################
         with SuppressInfoLogs():
             fastspeech2 = FastSpeech2.from_hparams(
                 source="speechbrain/tts-fastspeech2-ljspeech",
@@ -133,6 +122,8 @@ async def load_models():
         pbar.update(1)
         pbar.set_postfix_str("FastSpeech2 model loaded")
 
+
+        ##################### TTS (HIFI GAN) ##################
         with SuppressInfoLogs():
             hifi_gan = HIFIGAN.from_hparams(
                 source="speechbrain/tts-hifigan-ljspeech",
@@ -143,45 +134,22 @@ async def load_models():
 
 
     print("\nModels loaded successfully!")
-    print(f"Fast tokenizer enabled: {llm_tokenizer.is_fast}")
 
-    workflow = StateGraph(state_schema=MessagesState)
 
-    prompt_template = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                ("You are a helpful assistant, who always greets the user with the word 'sir'. "
-                 "Answer concisely to any request or question provided by the user. Use fifteen words or less. "
-                 "If answering in numbers, use written form. For example: answer 'number ten' and not 'number 10'"
-                ),
-            ),
-            MessagesPlaceholder(variable_name="messages"),
-        ]
-    )
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+    dims = 768 # From hf hub model page
 
     trimmer = trim_messages(
-        max_tokens=200,
-        strategy="last",
-        token_counter=chat_model,
-        include_system=True,
-        allow_partial=False,
-        start_on="human",
+            max_tokens=50,
+            strategy="last",
+            token_counter=chat_model,
+            include_system=True,
+            allow_partial=False,
+            start_on="human",
     )
 
-    # Define the function that calls the model
-    def call_model(state: MessagesState):
-        trimmed_messages = trimmer.invoke(state["messages"])
-        prompt = prompt_template.invoke(trimmed_messages)
-        response = chat_model.invoke(prompt)
-        return {"messages": response}
-
-    # Define the (single) node in the graph
-    workflow.add_edge(START, "model")
-    workflow.add_node("model", call_model)
-
-    memory = MemorySaver()
-    lang_app = workflow.compile(checkpointer=memory)
+    graph_connection = SyncGraph(embeddings, dims, trimmer, chat_model)
+    graph = graph_connection.get_graph()
 
 
 
@@ -233,8 +201,19 @@ async def generate_answer(file: UploadFile = File(...)):
         
         query = recognized_text
 
+        user_id = "user_1"
+        thread_id = "abc123"
+
         input_messages = [HumanMessage(query)]
-        output = lang_app.invoke({"messages": input_messages}, config)
+        config = {"configurable": {
+                                  "thread_id": thread_id, 
+                                  "user_id": user_id,
+                                  "mem_key": uuid.uuid4()
+                                  }, 
+        }
+
+        input_messages = [HumanMessage(query)]
+        output = graph.invoke({"messages": input_messages}, config)
         
         # output contains all messages in state
         response = output["messages"][-1]
@@ -252,7 +231,7 @@ async def generate_answer(file: UploadFile = File(...)):
             content={"error": f"An error occurred while processing the file: {str(e)}"},
         )
 
-
+    
 
 
 

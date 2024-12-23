@@ -37,10 +37,37 @@ services:
     secrets:
       - hf_token
       - langsmith_token
+      - db_pass
+      - db_user
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+        #source: ./postgres/db
+        #target: /var/lib/postgresql/data
+      - ./postgres/vector_init.sql:/docker-entrypoint-initdb.d/vector_init.sql
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_pass
+      POSTGRES_USER_FILE: /run/secrets/db_user
+      POSTGRES_DB: index-db
+    networks:
+      - backend
+    ports:
+      - 5432:5432
+    secrets:
+      - db_pass
+      - db_user
 networks:
   backend:
+volumes:
+  pgdata:
 secrets:
-   hf_token:
-     file: ./hf_token.txt
-   langsmith_token:
-     file: ./langsmith.txt
+  hf_token:
+    file: ./hf_token.txt
+  langsmith_token:
+    file: ./langsmith.txt
+  db_pass:
+    file: ./db_pass.txt
+  db_user:
+    file: ./db_user.txt

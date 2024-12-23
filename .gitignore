@@ -1,12 +1,13 @@
 # Specify filepatterns you want git to ignore.
 
 # testing and private things
-auto-voice/
 .gradio/
 *.wav
 models/
 hf_token.txt
 langsmith.txt
+db_pass.txt
+db_user.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -7,6 +7,7 @@ langchain
 langchain-core
 langchain-huggingface
 langgraph
+langgraph-checkpoint-postgres
 torch
 torchaudio
 sentencepiece
@@ -15,3 +16,6 @@ bitsandbytes
 faster-whisper
 ctranslate2
 speechbrain
+pgvector
+psycopg[binary,pool]
+
