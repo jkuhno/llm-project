@@ -1,10 +1,7 @@
-# A personal assistant of sorts
-A final product should be a voice assistant server running smooth on local machine, with access to bespoke tools.
+# A personal restaurant recommender
+Previously experimented on short- and long-term memory in Langgraph and inference on HuggingFace.
 
-Currently can listen to human speech, chat with short- and long-term memory and produce the output as speech.
-
-Short-term memory is in-memory, long-term memory is presisted in postgres.
-The long-term memory is saved in a parallel node with the chat model, but has very crude handling for duplicates and no debouncing.
+Now focusing on making an actually helpful system, that can recommend places to it given user cravings and make a decision if user is indecisive.
 
 Testing is done on Quadro RTX 4000 **8GB**, should fit in 6 or less with a little more optimization.
 
@@ -26,14 +23,7 @@ Save postgres username and password as respective text files *db_user.txt* and *
 LangSmith can be used for tracing by saving the API key as a text file *langsmith.txt* inside the top level project folder.
 
 
-### Todo
 
-- **Kinda done** Increase inference server performance
-- **Kinda done, needs refinement** Fix the robotic voice
-- Streaming
-- Add agentic capability (*1B and 3B Llama models require custom templates for tools in LangChain*)
-- Switch tts to StyleTTS2
-- Switch from Hugging Face to Ollama or vLLM (faster, according to the internet)
 
 
 **Built with Llama**
