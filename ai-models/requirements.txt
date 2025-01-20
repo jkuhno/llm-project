@@ -18,4 +18,5 @@ ctranslate2
 speechbrain
 pgvector
 psycopg[binary,pool]
-
+langchain-ollama
+ollama

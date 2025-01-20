@@ -7,9 +7,9 @@ import numpy as np
 ### Requests predictions from ai-models API server
 ### Copyright Jani kuhno
 
-def generate_response(audio, use_rag):
+def generate_response(audio):
     # For future, currently does nothing
-    print(f"RAG usage toggled: {use_rag}")
+    #print(f"RAG usage toggled: {use_rag}")
     with open(audio, 'rb') as f:
         response = requests.post("http://ai-models:8000/generate", files={"file": f})
         data = response.json()
@@ -38,9 +38,9 @@ def read_response(answer):
 
 
 theme = gr.themes.Soft()
+# theme="YTheme/Minecraft"
 
-
-with gr.Blocks(theme="YTheme/Minecraft") as app:
+with gr.Blocks() as app:
 
     gr.HTML(
         f"""
@@ -51,12 +51,12 @@ with gr.Blocks(theme="YTheme/Minecraft") as app:
     with gr.Column():
         audio_in = gr.Audio(label="Speak your question", sources="microphone", type="filepath")
         # For future use
-        use_rag = gr.Checkbox(label="Use retrieval memory")
+        #use_rag = gr.Checkbox(label="Use retrieval memory")
         rec_btn = gr.Button(value="Send to models")
         answer = gr.Textbox(label="Answer as text")
         audio_out = gr.Audio(label="Spoken Answer", autoplay=True)
 
-    rec_btn.click(fn=generate_response, inputs=[audio_in, use_rag], outputs=answer).then(
+    rec_btn.click(fn=generate_response, inputs=[audio_in], outputs=answer).then(
         fn=read_response, inputs=answer, outputs=audio_out)
 
 

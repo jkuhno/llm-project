@@ -20,8 +20,8 @@ from speechbrain.inference.vocoders import HIFIGAN
 
 from faster_whisper import WhisperModel
 
-from chat_model import ChatModel
-from sync_graph import SyncGraph
+from ollama_chat_model import OllamaChatModel
+from gmap_graph import GmapGraph
 
 
 ### API server housing AI models
@@ -53,6 +53,8 @@ with open('/run/secrets/hf_token') as token:
     hf_token = token.read().strip()
 login(hf_token)
 
+with open('/run/secrets/gmaps_key') as key:
+    GMAPS_API_KEY = key.read().strip()
 
 # FastAPI app
 app = FastAPI()
@@ -74,7 +76,7 @@ embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"
 
 
 
-################################# MODELS #########################################
+################################# MODELS INIT ####################################
 ##################################################################################
 
 # Startup: Load models into memory once
@@ -85,59 +87,37 @@ embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"
 async def load_models():
     global asr_model, fastspeech2, hifi_gan, chat_model, graph
 
-    class SuppressInfoLogs:
-        def __enter__(self):
-            self.original_level = logging.getLogger().level
-            logging.getLogger().setLevel(logging.WARNING)
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            logging.getLogger().setLevel(self.original_level)
-
-    
-    with tqdm(total=4, desc="Loading Models", ncols=80) as pbar:
+    ###################### ASR MODEL ###################
+    asr_model = WhisperModel("tiny", device=device, compute_type="float16")
         
-        ######################### ASR ######################
-        # Load Faster-Whisper model (streaming speech-to-text)
-        # Experiment with larger models if inaccurate, this is fast enough
-        with SuppressInfoLogs():
-            asr_model = WhisperModel("tiny", device=device, compute_type="float16")
-        pbar.update(1)
-        pbar.set_postfix_str("ASR model loaded")
-
     
-        ###################### CHAT MODEL ###################
-        with SuppressInfoLogs():
-            model_conf = ChatModel(chat_model_name, quantization_config)
-            chat_model = model_conf.get_model()
-        pbar.update(1)
-        pbar.set_postfix_str("Chat model loaded")
+    ###################### CHAT MODEL ###################
+    
+    # default is "llama 3.2" running on "http://ollama-server:11434"
+    model_init = OllamaChatModel()
+    model_init.pull_model()
+    chat_model = model_init.get_model()
 
 
-        ################# TTS (FASTSPEECH2) ##################
-        with SuppressInfoLogs():
-            fastspeech2 = FastSpeech2.from_hparams(
+    ################# TTS (FASTSPEECH2) ##################
+    fastspeech2 = FastSpeech2.from_hparams(
                 source="speechbrain/tts-fastspeech2-ljspeech",
                 run_opts={"device": device},
-            )
-        pbar.update(1)
-        pbar.set_postfix_str("FastSpeech2 model loaded")
+    )
 
 
-        ##################### TTS (HIFI GAN) ##################
-        with SuppressInfoLogs():
-            hifi_gan = HIFIGAN.from_hparams(
+    ##################### TTS (HIFI GAN) ##################
+    hifi_gan = HIFIGAN.from_hparams(
                 source="speechbrain/tts-hifigan-ljspeech",
                 run_opts={"device": device},
-            )
-        pbar.update(1)
-        pbar.set_postfix_str("HiFi-GAN model loaded")
-
-
-    print("\nModels loaded successfully!")
+    )
 
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
     dims = 768 # From hf hub model page
+
+
+    print("\nModels loaded successfully!")
 
     trimmer = trim_messages(
             max_tokens=50,
@@ -148,7 +128,7 @@ async def load_models():
             start_on="human",
     )
 
-    graph_connection = SyncGraph(embeddings, dims, trimmer, chat_model)
+    graph_connection = GmapGraph(embeddings, dims, trimmer, chat_model, GMAPS_API_KEY)
     graph = graph_connection.get_graph()
 
 
@@ -157,7 +137,10 @@ async def load_models():
 ##################################################################################
 
 
-"""
+
+@app.post("/generate", response_model=TextResponse)
+async def generate_answer(file: UploadFile = File(...)):
+    """
     Convert input audio file to text and generate an AI response
     
     Args:
@@ -168,8 +151,6 @@ async def load_models():
 
 
     """
-@app.post("/generate", response_model=TextResponse)
-async def generate_answer(file: UploadFile = File(...)):
     print(file.filename)
     try:
         # Check file type
@@ -235,7 +216,10 @@ async def generate_answer(file: UploadFile = File(...)):
 
 
 
-"""
+
+@app.post("/speech", response_model=AudioResponse)
+async def read_response(request: TextRequest):
+    """
     Convert input text to speech using Hugging Face Transformers TTS models.
     
     Args:
@@ -246,8 +230,6 @@ async def generate_answer(file: UploadFile = File(...)):
                                    List of floats needs to be converted to ndarray in UI app.
     """
 
-@app.post("/speech", response_model=AudioResponse)
-async def read_response(request: TextRequest):
     try:
         text = request.text
         #text = "testing testing"

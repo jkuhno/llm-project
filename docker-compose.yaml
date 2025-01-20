@@ -36,6 +36,7 @@ services:
               capabilities: [gpu]
     secrets:
       - hf_token
+      - gmaps_key
       - langsmith_token
       - db_pass
       - db_user
@@ -58,6 +59,19 @@ services:
     secrets:
       - db_pass
       - db_user
+  ollama-server:
+    image: ollama/ollama
+    networks:
+      - backend
+    ports:
+      - 11434:11434
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 networks:
   backend:
 volumes:
@@ -65,6 +79,8 @@ volumes:
 secrets:
   hf_token:
     file: ./hf_token.txt
+  gmaps_key:
+    file: ./gmaps_api.txt
   langsmith_token:
     file: ./langsmith.txt
   db_pass:
