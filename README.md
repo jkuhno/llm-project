@@ -16,12 +16,12 @@ Once granted, generate an [access token](https://huggingface.co/docs/hub/securit
 
 Env variables for the project setup are configured by creating a file called '.env' in the project folder, with the following contents:
 `
-HF_TOKEN=<your-huggingface-hub-token>
-GMAPS_API_KEY=<your-google-maps-api-key>
-LANGCHAIN_API_KEY=<your-langsmith-token>
-POSTGRES_PASSWORD=<create-password-of-choice>
-POSTGRES_USER=<create-username-of-choice>
-POSTGRES_DB='index.db' # optional, remove from yaml if not used
+    HF_TOKEN=<your-huggingface-hub-token>
+    GMAPS_API_KEY=<your-google-maps-api-key>
+    LANGCHAIN_API_KEY=<your-langsmith-token>
+    POSTGRES_PASSWORD=<create-password-of-choice>
+    POSTGRES_USER=<create-username-of-choice>
+    POSTGRES_DB='index.db' # optional, remove from yaml if not used
 `
 
 Make sure to keep the env file in gitignore. In there by default.
