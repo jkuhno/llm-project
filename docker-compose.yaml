@@ -35,12 +35,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    #secrets:
-    #  - hf_token
-    #  - gmaps_key
-    #  - langsmith_token
-    #  - db_pass
-    #  - db_user
   db:
     image: pgvector/pgvector:pg17
     restart: unless-stopped
@@ -57,9 +51,6 @@ services:
       - backend
     ports:
       - 5432:5432
-    #secrets:
-    #  - db_pass
-    #  - db_user
   ollama-server:
     image: ollama/ollama
     networks:
@@ -77,14 +68,4 @@ networks:
   backend:
 volumes:
   pgdata:
-secrets:
-  hf_token:
-    file: ./hf_token.txt
-  gmaps_key:
-    file: ./gmaps_api.txt
-  langsmith_token:
-    file: ./langsmith.txt
-  db_pass:
-    file: ./db_pass.txt
-  db_user:
-    file: ./db_user.txt
+
