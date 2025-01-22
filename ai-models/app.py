@@ -3,10 +3,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import List
 import os
-from tqdm import tqdm
-import logging
 
-import torch
 from huggingface_hub import login
 from transformers import AutoProcessor, BitsAndBytesConfig
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
@@ -41,20 +38,8 @@ class AudioResponse(BaseModel):
     audio: List[float]  # Audio waveform as a list of floats
 
 
-# Set langsmith tracing
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
-with open('/run/secrets/langsmith_token') as token:
-    if token:
-        os.environ["LANGCHAIN_API_KEY"] = token.read().strip()
-
-
-# Authenticate with the access token for gated llama models
-with open('/run/secrets/hf_token') as token:
-    hf_token = token.read().strip()
-login(hf_token)
-
-with open('/run/secrets/gmaps_key') as key:
-    GMAPS_API_KEY = key.read().strip()
+GMAPS_API_KEY = os.environ['GMAPS_API_KEY']
 
 # FastAPI app
 app = FastAPI()

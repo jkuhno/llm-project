@@ -1,5 +1,6 @@
 from langgraph.store.postgres import PostgresStore
 from typing_extensions import TypedDict
+import os
 
 # Import from langgraph.store.postgres gives an error, manual implementation
 class PoolConfig(TypedDict, total=False):
@@ -29,19 +30,8 @@ class PoolConfig(TypedDict, total=False):
 
 class ConnectPostgres:
     def __init__(self, embeddings, dims):
-        """
-        Initialize the Postgres connection with embedding and index configuration.
-
-        Args:
-            init_embeddings (callable): A function to initialize the embeddings.
-            dims (int): Dimensions of the embeddings.
-        """
-        # Authenticate with the access token for gated llama models
-        with open('/run/secrets/db_pass') as db_pass:
-            pw = db_pass.read().strip()
-        with open('/run/secrets/db_user') as db_user:
-            user = db_user.read().strip()
-
+        user = os.environ['POSTGRES_USER']
+        pw = os.environ['POSTGRES_PASSWORD']
         connection_string=f"postgresql://{user}:{pw}@db:5432/postgres"
 
         self.connection_string = connection_string
