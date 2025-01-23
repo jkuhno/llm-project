@@ -1,18 +1,23 @@
 services:
-  ai-app:
-    image: ai-project1-ai-app:latest
+  react-app:
+    image: client-react-vite
     build:
-      context: ./ai-app
+      context: ./react-app
       dockerfile: Dockerfile
     init: true
     volumes:
-      - type: bind 
-        source: ./ai-app/
-        target: /usr/src/app
+      - type: bind
+        source: ./react-app/
+        target: /usr/src/app/
+      - type: volume
+        target: /usr/src/app/node_modules 
+      - type: bind
+        source: ./react-app/vite.config.js
+        target: /usr/src/app/vite.config.js
     networks:
       - backend
     ports:
-      - 7860:7860
+      - 5173:5173
   ai-models:
     image: ai-project1-ai-models:latest
     build:

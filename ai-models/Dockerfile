@@ -13,4 +13,4 @@ ENV LD_LIBRARY_PATH=/opt/conda/lib/python3.11/site-packages/nvidia/cublas/lib:/o
 
 EXPOSE 8000
 
-CMD ["fastapi", "dev", "app.py", "--host", "0.0.0.0", "--port", "8000"]
+# CMD ["fastapi", "dev", "app.py", "--host", "0.0.0.0", "--port", "8000"]
