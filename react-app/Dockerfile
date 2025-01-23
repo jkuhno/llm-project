@@ -11,4 +11,4 @@ COPY . /usr/src/app/
 
 EXPOSE 5173
 
-CMD ["npm", "run", "exposed-port"]
+CMD ["npm", "run", "dev"]

@@ -8,17 +8,41 @@ function ChatBot() {
 
   const [userInput, setUserInput] = useState("");
 
-  function handleSend() {
+  const handleSend = async () => {
     if (!userInput.trim()) return;
 
+    // Step 1: Add the user's message to the chat
     setMessages([...messages, { sender: "user", text: userInput }]);
 
-    setTimeout(() => {
+    try {
+      // Step 2: Send the user input to the backend via POST
+      // Assume the backend is running on http://localhost:8080/generate
+      const response = await fetch("http://localhost:8080/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ input: userInput }), // Send the user input as JSON
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json(); // Assume backend returns JSON with `response` field
+
+      // Step 3: Update the bot's response with the backend result
       setMessages((prevMessages) => [
         ...prevMessages,
-        { sender: "bot", text: "I received: " + userInput },
+        { sender: "bot", text: data.response || "I couldn't process that." },
       ]);
-    }, 1000);
+    } catch (error) {
+      console.error("Error communicating with backend:", error);
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { sender: "bot", text: "Sorry, there was an error. Please try again." },
+      ]);
+    }
 
     setUserInput("");
   };

@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "exposed-port": "vite --host",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

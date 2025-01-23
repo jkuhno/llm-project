@@ -4,11 +4,7 @@
 .gradio/
 *.wav
 models/
-hf_token.txt
-langsmith.txt
-db_pass.txt
-db_user.txt
-gmaps_api.txt
+
 
 
 # Byte-compiled / optimized / DLL files
