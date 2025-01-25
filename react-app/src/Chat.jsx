@@ -8,6 +8,8 @@ function ChatBot() {
 
   const [userInput, setUserInput] = useState("");
 
+  let BACKEND_ADDRESS = import.meta.env.VITE_APP_BACKEND_ADDRESS;
+
   const handleSend = async () => {
     if (!userInput.trim()) return;
 
@@ -17,7 +19,8 @@ function ChatBot() {
     try {
       // Step 2: Send the user input to the backend via POST
       // Assume the backend is running on http://localhost:8080/generate
-      const response = await fetch("http://localhost:8080/generate", {
+      // const response = await fetch("http://localhost:8080/generate", {
+      const response = await fetch(BACKEND_ADDRESS, {  
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -44,7 +47,7 @@ function ChatBot() {
       ]);
     }
 
-    setUserInput("");
+    setUserInput(""); // Clear the input after sending
   };
 
   return (
