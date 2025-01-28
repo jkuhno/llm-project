@@ -27,5 +27,19 @@ POSTGRES_DB='index.db' # optional, remove from yaml if not used
 Make sure to keep the env file in gitignore. In there by default.
 
 
+#### Running
+
+`docker compose -f docker-compose-dev.yaml up --build` 
+
+or
+
+`docker compose -f docker-compose-prod.yaml up --build`
+
+Composing with *dev* has development features enabled, such as hot reload for frontend and API server,
+
+while *prod* is slightly optimized to run as release. *prod* runs the frontend with Nginx, 
+
+API server with uvicorn in release mode and ollama with GIN_MODE as release.
+
 
 **Built with Llama**
