@@ -18,10 +18,10 @@ Env variables for the project setup are configured by creating a file called '.e
 ```
 HF_TOKEN=<your-huggingface-hub-token>
 GMAPS_API_KEY=<your-google-maps-api-key>
-LANGCHAIN_API_KEY=<your-langsmith-token>
+LANGCHAIN_API_KEY=<your-langsmith-token> # optional, remove from yaml if not used
 POSTGRES_PASSWORD=<create-password-of-choice>
 POSTGRES_USER=<create-username-of-choice>
-POSTGRES_DB='index.db' # optional, remove from yaml if not used
+POSTGRES_DB='index.db' 
 ```
 
 Make sure to keep the env file in gitignore. In there by default.
