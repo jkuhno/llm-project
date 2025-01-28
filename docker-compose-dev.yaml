@@ -1,6 +1,6 @@
 services:
   react-app:
-    image: client-react-vite
+    image: client-react-vite:dev
     build:
       context: ./react-app
       dockerfile: Dockerfile
@@ -21,15 +21,16 @@ services:
       - app-network
     ports:
       - 5173:5173
-  ai-models:
-    image: ai-project1-ai-models:latest
+  api-server:
+    image: api-server:dev
     build:
-      context: ./ai-models
+      context: ./api-server
       dockerfile: Dockerfile
+      target: dev
     init: true
     volumes:
       - type: bind 
-        source: ./ai-models/
+        source: ./api-server/
         target: /usr/src/app
     env_file: ".env" 
     networks:
@@ -48,8 +49,6 @@ services:
     restart: unless-stopped
     volumes:
       - pgdata:/var/lib/postgresql/data
-        #source: ./postgres/db
-        #target: /var/lib/postgresql/data
       - ./postgres/vector_init.sql:/docker-entrypoint-initdb.d/vector_init.sql
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}

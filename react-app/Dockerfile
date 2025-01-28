@@ -1,6 +1,6 @@
-FROM node:18 AS base
+FROM node:19.4-bullseye AS base
 WORKDIR /usr/src/app
-COPY package.json ./
+COPY package*.json ./
 RUN npm install
 COPY . .
 
@@ -14,7 +14,7 @@ ENV VITE_APP_BACKEND_ADDRESS $VITE_APP_BACKEND_ADDRESS
 RUN echo "Backend Address: $VITE_APP_BACKEND_ADDRESS" && npm run build
 
 # Step 2: Serve with Nginx
-FROM nginx:latest
+FROM nginx:perl
 COPY --from=prod /usr/src/app/dist /usr/share/nginx/html
 COPY nginx.conf  /etc/nginx/nginx.conf
 EXPOSE 80
