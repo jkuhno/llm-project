@@ -1,18 +1,30 @@
 from langchain_core.prompts import PromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.messages import HumanMessage, trim_messages
+from langchain_core.messages import AIMessageChunk
 from langgraph.graph import START, END, MessagesState, StateGraph
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode
-from langchain_core.runnables.config import RunnableConfig
+from langchain_core.runnables.config import RunnableConfig, ensure_config, get_callback_manager_for_config
+from langchain_core.language_models.chat_models import ChatGenerationChunk
+
 from db_client import ConnectPostgres
 
 class GmapGraph:
-    def __init__(self, embeddings, dims, trimmer, chat_model, api_key):
+    def __init__(self, 
+                 embeddings, 
+                 dims, 
+                 trimmer, 
+                 chat_model, 
+                 direct_ollama_model, 
+                 ollama_pulled_model,
+                 api_key):
+        
         sync_connection = ConnectPostgres(embeddings, dims)
         self.sync_connection = sync_connection
         self.trimmer = trimmer
         self.chat_model = chat_model
+        self.direct_ollama_model = direct_ollama_model
+        self.ollama_pulled_model = ollama_pulled_model
         self.api_key = api_key
 
 
@@ -205,32 +217,57 @@ class GmapGraph:
         
         
         def chat(state: State, config: RunnableConfig):
-            user_input = state["messages"][0]
-            tool_msg = state["messages"][-1]
+            messages = state["messages"]
+            config = ensure_config(config | {"tags": ["chat_llm"]})
+            callback_manager = get_callback_manager_for_config(config)
+        
+            llm_run_manager = callback_manager.on_chat_model_start({}, [messages])[0]
+            
+            client = self.direct_ollama_model
+        
+            user_input = messages[0]
+            tool_msg = messages[-1]
             # if first and the last message are the same, this means it came straight from the router
             if user_input == tool_msg:
                 invoker = {"input": user_input.content, "tool_msg": ""}
             else:
-                invoker = {"input": user_input.content, "tool_msg": f"To assist you in responding, here is an output from an internal function call that is related to the user input: {tool_msg.content} \
+                invoker = {"input": user_input.content, "tool_msg": f"To assist you in responding, \
+                here is an output from an internal function call that is related to the user input: {tool_msg.content} \
                 Use this output to respond to the user input"}
             
-            prompt_template = PromptTemplate(
-                template=""" <|begin_of_text|><|start_header_id|>system<|end_header_id|>
-                         You are a helpful assistant. Respond to the input politely.
-                         {tool_msg}
-                         <|eot_id|>
-                         <|start_header_id|>user<|end_header_id|>
-                         User input: {input}
-                         
-                         <|eot_id|>
-                         <|start_header_id|>assistant<|end_header_id|>""",
-            input_variables=["input", "tool_msg"],
+            prompt = [
+                {
+                  "role": "system",
+                  "content": f"You are a helpful assistant. Respond to the input politely. {invoker['tool_msg']}"
+                },
+                {
+                  "role": "user",
+                  "content": invoker['input']
+                },
+            
+            ]
+            
+            response = client.chat(model=self.ollama_pulled_model, 
+                                   messages=prompt,
+                                   stream=True
             )
             
-            prompt = prompt_template.invoke(invoker)
-            #print(prompt)
-            response = self.chat_model.invoke(prompt)
-            return {"messages": [response]}
+            response_content = ""
+            for tokens in response:
+                response_content += tokens['message']['content']
+                chunk = ChatGenerationChunk(
+                        message=AIMessageChunk(
+                            content=tokens['message']['content'],
+                        )
+                )
+                llm_run_manager.on_llm_new_token(tokens['message']['content'], chunk=chunk)
+                
+            response_message = {
+                "role": "assistant",
+                "content": response_content,
+                #"tool_calls": tool_calls,
+            }
+            return {"messages": [response_message]}
 
         
         workflow = StateGraph(State)

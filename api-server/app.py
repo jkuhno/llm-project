@@ -1,15 +1,16 @@
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
+import json
 
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_core.messages import HumanMessage, trim_messages
 
 import uuid
 
-from ollama_chat_model import OllamaChatModel
+from ollama_chat_model import OllamaServer
 from gmap_graph import GmapGraph
 
 
@@ -41,7 +42,6 @@ app.add_middleware(
 )
 
 # Model global holders
-chat_model = None
 graph = None
 
 
@@ -49,6 +49,9 @@ graph = None
 device = "cuda"
 embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"
 
+# Ollama server configs
+OLLAMA_HOST = "http://ollama-server:11434"
+OLLAMA_MODEL_NAME = "llama3.2"
 
 ################################# MODELS INIT ####################################
 ##################################################################################
@@ -56,11 +59,13 @@ embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"
 
 @app.on_event("startup")
 async def load_models():
-    global chat_model, graph #asr_model, fastspeech2, hifi_gan, chat_model, graph    
+    global graph # chat_model, graph, direct_ollama_model
     # default is "llama 3.2" running on "http://ollama-server:11434"
-    model_init = OllamaChatModel()
-    model_init.pull_model()
-    chat_model = model_init.get_model()
+    ollama_server = OllamaServer(model=OLLAMA_MODEL_NAME, host=OLLAMA_HOST)
+    ollama_server.pull_model()
+    chat_model = ollama_server.get_langchain_model()
+    direct_ollama_model = ollama_server.get_direct_model()
+
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
     dims = 768 # From hf hub model page
@@ -74,7 +79,13 @@ async def load_models():
             start_on="human",
     )
 
-    graph_connection = GmapGraph(embeddings, dims, trimmer, chat_model, GMAPS_API_KEY)
+    graph_connection = GmapGraph(embeddings=embeddings, 
+                                 dims=dims, 
+                                 trimmer=trimmer, 
+                                 chat_model=chat_model, 
+                                 direct_ollama_model=direct_ollama_model,
+                                 ollama_pulled_model=OLLAMA_MODEL_NAME,
+                                 api_key=GMAPS_API_KEY)
     graph = graph_connection.get_graph()
 
     print("\nModels loaded successfully!")
@@ -85,7 +96,7 @@ async def load_models():
 ##################################################################################
 
 
-@app.post("/generate", response_model=TextResponse)
+@app.post("/generate")
 async def generate_answer(user_input: TextRequest):
     try:
         
@@ -101,17 +112,17 @@ async def generate_answer(user_input: TextRequest):
                                   "user_id": user_id,
                                   "mem_key": uuid.uuid4()
                                   }, 
-        }
+        }   
 
-        input_messages = [HumanMessage(query)]
-        output = graph.invoke({"messages": input_messages}, config)
-        
-        # output contains all messages in state
-        response = output["messages"][-1]
-        output["messages"][-1].pretty_print()
-        
-        return {"response": response.content}
+        def generator(input_messages):
+            for msg, metadata in graph.stream({"messages": input_messages}, 
+                                              config=config, 
+                                              stream_mode="messages"):
+                if msg.content: # and metadata["langgraph_node"] == "chat":
+                    yield f"data: {json.dumps({'response': msg.content})}\n\n"
 
+        return StreamingResponse(generator(input_messages), media_type="text/event-stream")              
+        
 
     except Exception as e:
         print(e)
@@ -119,5 +130,3 @@ async def generate_answer(user_input: TextRequest):
             status_code=500,
             content={"error": f"An error occurred while processing the file: {str(e)}"},
         )
-
-    
