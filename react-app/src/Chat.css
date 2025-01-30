@@ -26,6 +26,7 @@
   flex-direction: column;
   gap: 8px; /* Space between messages */
   overflow-y: auto;
+  scroll-behavior: smooth;
   background-color: #e9ecef;
 }
 

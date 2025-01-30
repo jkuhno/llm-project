@@ -118,7 +118,7 @@ async def generate_answer(user_input: TextRequest):
             for msg, metadata in graph.stream({"messages": input_messages}, 
                                               config=config, 
                                               stream_mode="messages"):
-                if msg.content: # and metadata["langgraph_node"] == "chat":
+                if msg.content and metadata["langgraph_node"] == "chat":
                     yield f"data: {json.dumps({'response': msg.content})}\n\n"
 
         return StreamingResponse(generator(input_messages), media_type="text/event-stream")              

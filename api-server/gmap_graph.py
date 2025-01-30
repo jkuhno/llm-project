@@ -27,13 +27,13 @@ class GmapGraph:
         self.ollama_pulled_model = ollama_pulled_model
         self.api_key = api_key
 
-
+    
     def get_graph(self):
         with self.sync_connection.get_store() as store:
             store.setup()
             
         GMAPS_API_KEY = self.api_key
-
+        """
         # support function
         def get_reviews(id: str) -> str:
             gmaps = googlemaps.Client(key=GMAPS_API_KEY)
@@ -49,7 +49,7 @@ class GmapGraph:
             reviews = [{key: result[key] for key in keys if key in result} for result in place["result"]["reviews"]]
             return reviews[0]["text"]
 
-        """
+       
         @tool
         def get_restaurants(query: str) -> list[dict]:
             
