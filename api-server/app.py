@@ -67,7 +67,7 @@ async def load_models():
     direct_ollama_model = ollama_server.get_direct_model()
 
 
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+    embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
     dims = 768 # From hf hub model page
 
     trimmer = trim_messages(
