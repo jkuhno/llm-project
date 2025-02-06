@@ -1,12 +1,13 @@
 # Specify filepatterns you want git to ignore.
 
 # testing and private things
-
+.langgraph_api/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
 
 # C extensions
 *.so
