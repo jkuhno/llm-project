@@ -1,4 +1,4 @@
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate # type: ignore
 
 def router_prompt(input_variables: list[str]):
     return PromptTemplate(

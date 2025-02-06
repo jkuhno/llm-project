@@ -24,15 +24,17 @@ services:
   api-server:
     image: api-server:dev
     build:
-      context: ./api-server
+      context: ./api_server
       dockerfile: Dockerfile
       target: dev
     init: true
     volumes:
       - type: bind 
-        source: ./api-server/
+        source: .
         target: /usr/src/app
-    env_file: ".env" 
+    env_file: ".env"
+    environment:
+      - PYTHONPATH=/usr/src/app
     networks:
       - app-network
     ports:

@@ -1,6 +1,6 @@
 
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-from langchain_huggingface import HuggingFacePipeline, ChatHuggingFace
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline # type: ignore
+from langchain_huggingface import HuggingFacePipeline, ChatHuggingFace # type: ignore
 
 
 class ChatModel:

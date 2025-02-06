@@ -1,0 +1,8 @@
+{
+    "dependencies": ["."],
+    "graphs": {
+      "agent": "./api_server/gmap_graph.py:get_graph"
+    },
+    "env": ".env"
+  }
+  

@@ -1,17 +1,17 @@
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi import FastAPI # type: ignore
+from fastapi.responses import JSONResponse, StreamingResponse # type: ignore
+from fastapi.middleware.cors import CORSMiddleware # type: ignore
+from pydantic import BaseModel # type: ignore
 import os
 import json
 
-from langchain_huggingface.embeddings import HuggingFaceEmbeddings
-from langchain_core.messages import HumanMessage, trim_messages
+
+from langchain_core.messages import HumanMessage, trim_messages # type: ignore
 
 import uuid
 
-from ollama_chat_model import OllamaServer
-from gmap_graph import GmapGraph
+
+from api_server.gmap_graph import get_graph
 
 
 ### Serving model outputs via FastAPI
@@ -27,7 +27,7 @@ class TextResponse(BaseModel):
 
 
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
-GMAPS_API_KEY = os.environ['GMAPS_API_KEY']
+# GMAPS_API_KEY = os.environ['GMAPS_API_KEY']
 
 # FastAPI app
 app = FastAPI()
@@ -46,11 +46,11 @@ graph = None
 
 
 # Model configs
-device = "cuda"
-embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"
+# device = "cuda"
+#embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"
 
 # Ollama server configs
-OLLAMA_HOST = "http://ollama-server:11434"
+##OLLAMA_HOST = "http://ollama-server:11434"
 OLLAMA_MODEL_NAME = "llama3.2"
 
 ################################# MODELS INIT ####################################
@@ -59,34 +59,27 @@ OLLAMA_MODEL_NAME = "llama3.2"
 
 @app.on_event("startup")
 async def load_models():
-    global graph # chat_model, graph, direct_ollama_model
+    global graph 
     # default is "llama 3.2" running on "http://ollama-server:11434"
-    ollama_server = OllamaServer(model=OLLAMA_MODEL_NAME, host=OLLAMA_HOST)
-    ollama_server.pull_model()
-    chat_model = ollama_server.get_langchain_model()
-    direct_ollama_model = ollama_server.get_direct_model()
+    #ollama_server = OllamaServer(model=OLLAMA_MODEL_NAME, host=OLLAMA_HOST)
+    #ollama_server.pull_model()
+    #chat_model = ollama_server.get_langchain_model()
+    #direct_ollama_model = ollama_server.get_direct_model()
 
 
-    embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
-    dims = 768 # From hf hub model page
+    #embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
+    #dims = 768 # From hf hub model page
 
-    trimmer = trim_messages(
-            max_tokens=50,
-            strategy="last",
-            token_counter=chat_model,
-            include_system=True,
-            allow_partial=False,
-            start_on="human",
-    )
+    #trimmer = trim_messages(
+    #        max_tokens=50,
+     #       strategy="last",
+     #       token_counter=chat_model,
+     #       include_system=True,
+      #      allow_partial=False,
+      #      start_on="human",
+   # )
 
-    graph_connection = GmapGraph(embeddings=embeddings, 
-                                 dims=dims, 
-                                 trimmer=trimmer, 
-                                 chat_model=chat_model, 
-                                 direct_ollama_model=direct_ollama_model,
-                                 ollama_pulled_model=OLLAMA_MODEL_NAME,
-                                 api_key=GMAPS_API_KEY)
-    graph = graph_connection.get_graph()
+    graph = get_graph({})
 
     print("\nModels loaded successfully!")
 

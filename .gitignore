@@ -1,10 +1,6 @@
 # Specify filepatterns you want git to ignore.
 
 # testing and private things
-.gradio/
-*.wav
-models/
-
 
 
 # Byte-compiled / optimized / DLL files

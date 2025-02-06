@@ -41,5 +41,20 @@ while *prod* is slightly optimized to run as release. *prod* runs the frontend w
 
 API server with uvicorn in release mode and ollama with GIN_MODE as release.
 
+*New option (not finalized yet)*
+
+`docker compose -f docker-compose-langgraph.yaml up --build` 
+
+Launches the project as a [LangGraph development server](https://langchain-ai.github.io/langgraph/concepts/langgraph_cli/#dev)
+
+It can be connected to with LangGraph Studio by 
+
+`https://smith.langchain.com/studio/?baseUrl=http://localhost:2024`
+
+Because currently the graph uses a custom function for chat calls directly to ollama server, the main chat 
+node does not display correctly in LangGraph Studio,
+
+which is annoying since that is the main node to debug. Will be fixed.
+
 
 **Built with Llama**

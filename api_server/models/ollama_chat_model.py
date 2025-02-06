@@ -1,8 +1,7 @@
-import requests
-import json
+import requests # type: ignore
 
-from langchain_ollama import ChatOllama
-from ollama import Client
+from langchain_ollama import ChatOllama # type: ignore
+from ollama import Client # type: ignore
 
 class OllamaServer:
     def __init__(self, model: str = "llama3.2", host: str = "http://ollama-server:11434"):

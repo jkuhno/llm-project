@@ -1,5 +1,5 @@
-from langgraph.store.postgres import PostgresStore
-from typing_extensions import TypedDict
+from langgraph.store.postgres import PostgresStore # type: ignore
+from typing_extensions import TypedDict # type: ignore
 import os
 
 # Import from langgraph.store.postgres gives an error, manual implementation
