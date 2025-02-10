@@ -5,11 +5,9 @@ from pydantic import BaseModel # type: ignore
 import os
 import json
 
-
 from langchain_core.messages import HumanMessage, trim_messages # type: ignore
 
 import uuid
-
 
 from api_server.gmap_graph import get_graph
 
@@ -44,55 +42,21 @@ app.add_middleware(
 # Model global holders
 graph = None
 
-
-# Model configs
-# device = "cuda"
-#embeddings_model_name = "sentence-transformers/all-mpnet-base-v2"
-
-# Ollama server configs
-##OLLAMA_HOST = "http://ollama-server:11434"
-OLLAMA_MODEL_NAME = "llama3.2"
-
 ################################# MODELS INIT ####################################
 ##################################################################################
-
-
 @app.on_event("startup")
 async def load_models():
     global graph 
-    # default is "llama 3.2" running on "http://ollama-server:11434"
-    #ollama_server = OllamaServer(model=OLLAMA_MODEL_NAME, host=OLLAMA_HOST)
-    #ollama_server.pull_model()
-    #chat_model = ollama_server.get_langchain_model()
-    #direct_ollama_model = ollama_server.get_direct_model()
-
-
-    #embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
-    #dims = 768 # From hf hub model page
-
-    #trimmer = trim_messages(
-    #        max_tokens=50,
-     #       strategy="last",
-     #       token_counter=chat_model,
-     #       include_system=True,
-      #      allow_partial=False,
-      #      start_on="human",
-   # )
-
     graph = get_graph({})
-
     print("\nModels loaded successfully!")
 
 
 
 ################################# API ############################################
 ##################################################################################
-
-
 @app.post("/generate")
 async def generate_answer(user_input: TextRequest):
     try:
-        
         query = user_input.input
         
         # TODO> get the user_id and thread_id from the request @jani

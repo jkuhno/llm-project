@@ -1,11 +1,11 @@
 fastapi[standard]
 uvicorn==0.32.0
-numpy
 transformers
 huggingface_hub
 langchain
 langchain-core
 langchain-huggingface
+langchain-openai
 langgraph
 langgraph-checkpoint-postgres
 torch
@@ -13,9 +13,6 @@ torchaudio
 sentencepiece
 accelerate
 bitsandbytes
-faster-whisper
-ctranslate2
-speechbrain
 pgvector
 psycopg[binary,pool]
 langchain-ollama

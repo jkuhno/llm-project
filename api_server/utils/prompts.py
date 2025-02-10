@@ -1,4 +1,6 @@
 from langchain_core.prompts import PromptTemplate # type: ignore
+from langchain_core.prompt_values import PromptValue # type: ignore
+from langchain_core.messages import AnyMessage # type: ignore
 
 def router_prompt(input_variables: list[str]):
     return PromptTemplate(
@@ -160,3 +162,34 @@ Here is the user input: {input}
 <|start_header_id|>assistant<|end_header_id|>""",
         input_variables=input_variables,
         )
+
+def chat_prompt(user_input: AnyMessage, tool_msg: AnyMessage, preferences: list[str]) -> PromptValue:
+    
+    if user_input == tool_msg:
+        invoker = {"input": user_input.content, "tool_msg": "Respond to the user normally and helpfully"}
+
+    elif tool_msg.name == "get_restaurants":
+        invoker = {"input": user_input.content, "tool_msg": f"""As an assistant, your role is 
+        to help the user decide where to eat. You are given seven options, each 
+        following the format Name, Address and two reviews. Here are the options: {tool_msg.content} 
+        Use these options to present the user with your top 3 choices, always paying attention to user 
+        preferences: {preferences}. From the top 3, suggest one which you think is the best match to 
+        the user inquiry. Give a short explanation why you suggest that one. You do not need to copy all 
+        text from the options, most important are restaurant names and why you pick them."""}
+
+    else:
+        invoker = {"input": user_input.content, "tool_msg": f"To assist you in responding, \
+        here is an output from an internal function call that is related to the user input: {tool_msg.content} \
+        Use this output to respond to the user input"}
+    
+    return PromptTemplate(
+        template=""" <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+You are a helpful assistant. Respond to the input politely.
+{tool_msg}
+<|eot_id|>
+<|start_header_id|>user<|end_header_id|>
+Here is the user input: {input}
+<|eot_id|>
+<|start_header_id|>assistant<|end_header_id|>""",
+        input_variables=[input, tool_msg],
+        ).invoke(invoker)

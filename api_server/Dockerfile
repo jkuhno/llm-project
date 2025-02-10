@@ -20,7 +20,7 @@ FROM build AS dev
 EXPOSE 8000
 
 # Run app in development mode
-CMD ["fastapi", "dev", "api_server/app.py", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["fastapi", "dev", "api_server/app.py", "--host", "0.0.0.0", "--port", "8080"]
 
 # Target for langgraph server model debugging
 FROM build AS langgraph
@@ -50,4 +50,4 @@ ENV LD_LIBRARY_PATH=/opt/conda/lib/python3.10/site-packages/nvidia/cublas/lib:/o
 EXPOSE 8000
 
 # Run the application (for production mode)
-CMD ["uvicorn", "api_server.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api_server.app:app", "--host", "0.0.0.0", "--port", "8080"]

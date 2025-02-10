@@ -11,31 +11,23 @@ import requests # type: ignore
 import os # type: ignore
 
 from api_server.utils.db_client import ConnectPostgres
-from api_server.models.ollama_chat_model import OllamaServer
 from api_server.utils import prompts
+from api_server.models.vllm_chat import get_vllm_chat_model
 
 EMBED_MODEL_NAME = "sentence-transformers/all-mpnet-base-v2"
 DIMS = 768
-
-OLLAMA_HOST = "http://ollama-server:11434"
-OLLAMA_MODEL_NAME = "llama3.2"
 GMAPS_API_KEY = os.environ['GMAPS_API_KEY']
 
 # Setup
 embeddings = HuggingFaceEmbeddings(model_name=EMBED_MODEL_NAME)
+chat_model = get_vllm_chat_model()
+
 sync_connection = ConnectPostgres(embeddings, DIMS)
-
-ollama_server = OllamaServer(model=OLLAMA_MODEL_NAME, host=OLLAMA_HOST)
-ollama_server.pull_model()
-
-chat_model = ollama_server.get_langchain_model()
-direct_ollama_model = ollama_server.get_direct_model()
 
 with sync_connection.get_store() as store:
     store.setup()
 
 def get_graph(config: RunnableConfig) -> StateGraph: 
-    
         
 
     ###################
@@ -219,15 +211,9 @@ def get_graph(config: RunnableConfig) -> StateGraph:
     
     def chat(state: State, config: RunnableConfig):
         messages = state["messages"]
-        config = ensure_config(config | {"tags": ["chat_llm"]})
-        callback_manager = get_callback_manager_for_config(config)
-    
-        llm_run_manager = callback_manager.on_chat_model_start({}, [messages])[0]
-        
-        client = direct_ollama_model
-    
         with sync_connection.get_store() as store:
-            memories = store.search(("user_1", "preferences"), query="pizza")
+            memories = store.search((config["configurable"]["user_id"], "preferences"))
+            
         preferences = []
         for memory in memories:
             if "preference" in memory.value.keys():
@@ -235,58 +221,12 @@ def get_graph(config: RunnableConfig) -> StateGraph:
                 
         user_input = messages[0]
         tool_msg = messages[-1]
-        # if first and the last message are the same, this means it came straight from the router
-        if user_input == tool_msg:
-            invoker = {"input": user_input.content, "tool_msg": "Respond to the user normally and helpfully"}
-        elif tool_msg.name == "get_restaurants":
-            invoker = {"input": user_input.content, "tool_msg": f"""As an assistant, your role is 
-            to help the user decide where to eat. You are given seven options, each 
-            following the format Name, Address and two reviews. Here are the options: {tool_msg.content} 
-            Use these options to present the user with your top 3 choices, always paying attention to user 
-            preferences: {preferences}. From the top 3, suggest one which you think is the best match to 
-            the user inquiry. Give a short explanation why you suggest that one. You do not need to copy all 
-            text from the options, most important are restaurant names and why you pick them."""}
-        else:
-            invoker = {"input": user_input.content, "tool_msg": f"To assist you in responding, \
-            here is an output from an internal function call that is related to the user input: {tool_msg.content} \
-            Use this output to respond to the user input"}
-        
-        prompt = [
-            {
-              "role": "system",
-              "content": f"You are a helpful assistant. Respond to the input using the following guidance: \
-      {invoker['tool_msg']}"
-            },
-            {
-              "role": "user",
-              "content": invoker['input']
-            },
-        
-        ]
-        
-        response = client.chat(model=OLLAMA_MODEL_NAME, 
-                               messages=prompt,
-                               stream=True
-        )
-        
-        response_content = ""
-        for tokens in response:
-            #print(chunk['message']['content'], end='', flush=True)
-            response_content += tokens['message']['content']
-            chunk = ChatGenerationChunk(
-                    message=AIMessageChunk(
-                        content=tokens['message']['content'],
-                    )
-            )
-            #print(chunk)
-            llm_run_manager.on_llm_new_token(tokens['message']['content'], chunk=chunk)
             
-        response_message = {
-            "role": "assistant",
-            "content": response_content,
-            #"tool_calls": tool_calls,
-        }
-        return {"messages": [response_message]}
+        # chat_prompt already invokes the PrompTemplate
+        prompt = prompts.chat_prompt(user_input, tool_msg, preferences)
+        response = chat_model.invoke(prompt)
+        return {"messages": [response]}
+
     
     workflow = StateGraph(State)
     
