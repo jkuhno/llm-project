@@ -62,12 +62,12 @@ def get_restaurants(query: str) -> str:
     }
     # Needs a better way to handle location bias
     data = {
-        "textQuery": f"{query}, restaurant in helsinki",
+        "textQuery": query,#f"{query}, restaurant in helsinki",
         "pageSize": "7",
         "openNow": "false",
         "locationBias": {
           "circle": {
-            "center": {"latitude": 60.18504951454597, "longitude": 24.952783788542657},
+            "center": {"latitude": 60.17186270835607, "longitude": 24.94155619771155},
             "radius": 1000.0
           }
         }

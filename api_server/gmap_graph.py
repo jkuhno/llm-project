@@ -1,10 +1,9 @@
 from langgraph.graph import START, END, MessagesState, StateGraph # type: ignore
-from langchain_core.tools import tool # type: ignore
 from langgraph.prebuilt import ToolNode # type: ignore
 from langchain_core.runnables.config import RunnableConfig # type: ignore
+from langchain_core.messages import HumanMessage
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings # type: ignore
 
-import requests # type: ignore
 import os # type: ignore
 
 from api_server.utils.db_client import ConnectPostgres
@@ -79,7 +78,7 @@ def get_graph(config: RunnableConfig) -> StateGraph:
     
     def maps_agent(state: State, config: RunnableConfig):
         messages = state["messages"]
-        invoker = {"input": messages,
+        invoker = {"input": messages[-1],
                    "tools": tools[0],
               }
         prompt_template = prompts.maps_agent_prompt(["input", "tools"])
@@ -90,7 +89,7 @@ def get_graph(config: RunnableConfig) -> StateGraph:
     
     def save_agent(state: State, config: RunnableConfig):
         messages = state["messages"]
-        invoker = {"input": messages,
+        invoker = {"input": messages[-1],
                    "tools": tools[1],
               }
         prompt_template = prompts.save_agent_prompt(["input", "tools"])
@@ -110,7 +109,7 @@ def get_graph(config: RunnableConfig) -> StateGraph:
             if "preference" in memory.value.keys():
                 preferences.append(memory.value["preference"])
                 
-        user_input = messages[0]
+        user_input = next((msg for msg in reversed(messages) if isinstance(msg, HumanMessage)), None)
         tool_msg = messages[-1]
             
         # chat_prompt already invokes the PrompTemplate
